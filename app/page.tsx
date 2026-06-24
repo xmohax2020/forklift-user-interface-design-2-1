@@ -16,6 +16,7 @@
 */
 "use client"
 
+import { useState } from "react"
 import { AnimatedBackground } from "@/components/animated-background"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { RobotStatusPanel } from "@/components/robot-status-panel"
@@ -23,6 +24,7 @@ import { MissionPanel } from "@/components/mission-panel"
 import { TelemetryPanel } from "@/components/telemetry-panel"
 import { CameraPanel } from "@/components/camera-panel"
 import { MapPanel } from "@/components/map-panel"
+import { FactorySystemPanel } from "@/components/factory-system-panel"
 import { PlcPanel } from "@/components/plc-panel"
 import { QrPanel } from "@/components/qr-panel"
 import { ManualControlPanel } from "@/components/manual-control-panel"
@@ -32,6 +34,8 @@ import { useRobotSimulation } from "@/lib/robot-simulation"
 export default function Page() {
   // Tüm canlı durum ve operatör eylemleri tek hook'tan gelir.
   const sim = useRobotSimulation()
+  // MADDE 2: harita rota düzenleme modu (yalnızca arayüz durumu).
+  const [editingRoute, setEditingRoute] = useState(false)
 
   return (
     <>
@@ -66,7 +70,26 @@ export default function Page() {
           {/* Orta kolon */}
           <div className="flex flex-col gap-4 lg:col-span-5">
             <CameraPanel telemetry={sim.telemetry} />
-            <MapPanel telemetry={sim.telemetry} />
+            <MapPanel
+              telemetry={sim.telemetry}
+              route={sim.route}
+              editing={editingRoute}
+              onToggleEdit={() => setEditingRoute((v) => !v)}
+              onAddWaypoint={sim.addWaypoint}
+              onClear={sim.clearRoute}
+              onReset={sim.resetRoute}
+              onSave={(count) => {
+                sim.saveRoute(count)
+                setEditingRoute(false)
+              }}
+            />
+            <FactorySystemPanel
+              queue={sim.taskQueue}
+              activeTask={sim.activeTask}
+              connected={sim.telemetry.plcConnected}
+              canDispatch={!sim.running && !sim.manualMode}
+              onDispatch={sim.dispatchTask}
+            />
           </div>
 
           {/* Sağ kolon */}

@@ -84,6 +84,41 @@ const PICKUPS = ["A1", "A2", "A3"] // 3 alma noktası
 const DROPOFFS = ["B1", "B2", "B3"] // 3 bırakma noktası
 const QR_CODES = ["Q1", "Q2", "Q3", "Q4", "Q5"]
 
+/*
+  ŞARTNAME MADDE 2 — ROTA TANIMLAMA
+  Operatörün arayüz üzerinden tanımlayabileceği rota, harita koordinatlarında
+  (0-100 ölçek) köşe noktaları (waypoint) dizisidir. Aşağıdaki dizi varsayılan
+  (fabrika tarafından önceden tanımlı) rotadır; operatör harita panelinden
+  düzenleyince bu dizi güncellenir ve robot YENİ rotayı takip eder.
+*/
+export const DEFAULT_ROUTE: [number, number][] = [
+  [12, 88], // başlangıç / bekleme
+  [12, 30],
+  [40, 30], // alma bölgesi
+  [40, 62],
+  [70, 62], // kapı bölgesi (Q5)
+  [70, 20],
+  [90, 20], // bırakma
+]
+
+/*
+  ŞARTNAME MADDE 3 — FABRİKA ÜRETİM SİSTEMİ İLE HABERLEŞME
+  Görevler (alma/bırakma noktaları) fabrika üretim sisteminden (MES/ERP)
+  iletilir. Gerçek sistemde bu iş emirleri tanımlı protokol (ör. OPC-UA veya
+  Modbus TCP) üzerinden gelir. Aşağıdaki tip, gelen bir iş emrini temsil eder.
+
+  FAYDASI: Operatör fabrikadan gelen iş emri kuyruğunu görür ve hangi işin
+  robota gönderileceğini yönetir; veriler elle değil sistemden beslenir.
+*/
+export interface FactoryTask {
+  id: string // iş emri numarası, ör. WO-1042
+  pickup: string // alma noktası
+  dropoff: string // bırakma noktası
+  priority: "normal" | "yuksek" // öncelik
+  payload: string // taşınacak yük açıklaması
+  receivedAt: string // sisteme düşme zamanı
+}
+
 function nowTime() {
   return new Date().toLocaleTimeString("tr-TR", { hour12: false })
 }
@@ -133,9 +168,30 @@ export function useRobotSimulation() {
   const [messages, setMessages] = useState<CommMessage[]>([])
   const [running, setRunning] = useState(false) // operatör "Görevi Başlat" deyince true
   const [manualMode, setManualMode] = useState(false) // robot üzerindeki anahtar "manuel"de mi
+
+  // MADDE 2: operatörün tanımladığı aktif rota (waypoint dizisi)
+  const [route, setRouteState] = useState<[number, number][]>(DEFAULT_ROUTE)
+  // MADDE 3: fabrika üretim sisteminden gelen iş emri kuyruğu + aktif görev
+  const [taskQueue, setTaskQueue] = useState<FactoryTask[]>([])
+  const [activeTask, setActiveTask] = useState<FactoryTask | null>(null)
+
   const msgId = useRef(0)
   const stepIndex = useRef(0)
   const stepElapsed = useRef(0)
+  const woCounter = useRef(1041) // iş emri numarası sayacı
+
+  // Fabrika üretim sisteminden yeni bir iş emri üretir (gerçek sistemde gelen veri).
+  const makeTask = (): FactoryTask => {
+    woCounter.current += 1
+    return {
+      id: `WO-${woCounter.current}`,
+      pickup: PICKUPS[Math.floor(Math.random() * PICKUPS.length)],
+      dropoff: DROPOFFS[Math.floor(Math.random() * DROPOFFS.length)],
+      priority: Math.random() < 0.25 ? "yuksek" : "normal",
+      payload: "Palet • 5 kg",
+      receivedAt: nowTime(),
+    }
+  }
 
   const pushLog = (dir: LogDirection, text: string) => {
     // ID'yi her zaman mevcut listedeki en büyük id'den türetiyoruz.
@@ -148,27 +204,44 @@ export function useRobotSimulation() {
     })
   }
 
-  // İlk bağlantı el sıkışması logu (sadece bir kez).
+  // İlk bağlantı el sıkışması logu + fabrika sisteminden ilk iş emirleri (bir kez).
   useEffect(() => {
     pushLog("tx", "Robot çevrimiçi — YARISMA AGI'ye bağlanıldı")
     pushLog("tx", "PLC bağlantısı kuruldu (TCP/Modbus)")
     pushLog("rx", "PLC: Bağlantı onaylandı")
+    pushLog("rx", "MES: Üretim sistemi bağlantısı hazır (OPC-UA)")
+    // Fabrika üretim sisteminden gelen ilk iş emirleri kuyruğa eklenir.
+    setTaskQueue([makeTask(), makeTask()])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /*
+    MADDE 3 — Fabrika üretim sistemi periyodik olarak yeni iş emri gönderir.
+    Gerçek sistemde bu, tanımlı protokol üzerinden gelen mesajla tetiklenir.
+    Kuyrukta en fazla 6 iş emri tutulur.
+  */
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTaskQueue((q) => {
+        if (q.length >= 6) return q
+        const task = makeTask()
+        pushLog("rx", `MES: Yeni iş emri → ${task.id} (${task.pickup}→${task.dropoff})`)
+        return [...q, task]
+      })
+    }, 14000)
+    return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Senaryo adımları (şartname senaryosu birebir).
   const steps = useRef<Step[]>([
     {
+      // Görev artık fabrika üretim sisteminden (kuyruktan) gelir; burada
+      // sadece kabul edilip tanımlı rota üzerinden işlenmeye başlanır.
       state: "task_processing",
       duration: 3,
       loaded: false,
-      onEnter: (api) => {
-        const p = PICKUPS[Math.floor(Math.random() * PICKUPS.length)]
-        const d = DROPOFFS[Math.floor(Math.random() * DROPOFFS.length)]
-        setT((s) => ({ ...s, pickupNode: p, dropoffNode: d }))
-        api.log("rx", `PLC: Görev atandı → Alma: ${p}, Bırakma: ${d}`)
-        api.log("tx", "Görev kabul edildi, rota hesaplanıyor")
-      },
+      onEnter: (api) => api.log("tx", "Rota doğrulandı — harekete hazırlanılıyor"),
     },
     {
       state: "moving_empty",
@@ -330,15 +403,61 @@ export function useRobotSimulation() {
 
   // -- Operatör eylemleri (arayüz butonlarının çağıracağı fonksiyonlar) --
 
-  const startMission = () => {
-    if (manualMode) return
+  /*
+    MADDE 3 — Bir iş emrini robota gönderip görevi başlatır.
+    Alma/bırakma noktaları fabrika üretim sisteminden gelen göreve göre ayarlanır.
+  */
+  const beginMission = (task: FactoryTask) => {
+    if (manualMode || running) return
+    if (route.length < 2) {
+      pushLog("tx", "UYARI: Tanımlı rota yok — önce rota tanımlayın")
+      return
+    }
+    setActiveTask(task)
     stepIndex.current = 0
     stepElapsed.current = 0
-    const first = steps.current[0]
-    first.onEnter?.(api)
-    setT((s) => ({ ...s, routeProgress: 0, missionSeconds: 0 }))
+    setT((s) => ({
+      ...s,
+      pickupNode: task.pickup,
+      dropoffNode: task.dropoff,
+      routeProgress: 0,
+      missionSeconds: 0,
+    }))
+    pushLog("rx", `MES→Robot: İş emri ${task.id} iletildi (Alma ${task.pickup} • Bırakma ${task.dropoff})`)
+    pushLog("tx", "Görev kabul edildi, tanımlı rota üzerinden ilerlenecek")
+    steps.current[0].onEnter?.(api)
     setRunning(true)
   }
+
+  // Mission panelindeki "Görevi Başlat": kuyruğun başındaki işi alır.
+  const startMission = () => {
+    if (manualMode || running) return
+    const task = taskQueue[0] ?? makeTask()
+    if (taskQueue[0]) setTaskQueue((q) => q.slice(1))
+    beginMission(task)
+  }
+
+  // Fabrika panelinden belirli bir iş emrini robota gönderir.
+  const dispatchTask = (id: string) => {
+    const task = taskQueue.find((x) => x.id === id)
+    if (!task) return
+    setTaskQueue((q) => q.filter((x) => x.id !== id))
+    beginMission(task)
+  }
+
+  // -- MADDE 2: Rota tanımlama eylemleri --
+  const addWaypoint = (p: [number, number]) =>
+    setRouteState((r) => [...r, [Math.round(p[0]), Math.round(p[1])]])
+  const clearRoute = () => {
+    setRouteState([])
+    pushLog("tx", "Rota temizlendi — yeni rota tanımlanıyor")
+  }
+  const resetRoute = () => {
+    setRouteState(DEFAULT_ROUTE)
+    pushLog("tx", "Varsayılan rota geri yüklendi")
+  }
+  const saveRoute = (count: number) =>
+    pushLog("tx", `Yeni rota kaydedildi ve robota yüklendi (${count} nokta)`)
 
   const emergencyStop = () => {
     setRunning(false)
@@ -401,6 +520,17 @@ export function useRobotSimulation() {
     messages,
     running,
     manualMode,
+    // MADDE 2: rota tanımlama
+    route,
+    addWaypoint,
+    clearRoute,
+    resetRoute,
+    saveRoute,
+    // MADDE 3: fabrika üretim sistemi
+    taskQueue,
+    activeTask,
+    dispatchTask,
+    // genel
     startMission,
     emergencyStop,
     resetError,
