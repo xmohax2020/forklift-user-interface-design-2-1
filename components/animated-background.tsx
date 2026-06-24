@@ -8,57 +8,13 @@
   lojistik) bağlamını görsel olarak destekler. Tamamen pointer-events-none
   olduğu için arayüz etkileşimini engellemez ve sadece CSS transform kullandığı
   için performansı düşürmez.
-
-  FARE IŞIĞI: Fare hareket ettikçe imlecin altında küçük beyaz bir ışık
-  (radial glow) belirir. Konum CSS değişkenleri (--mx/--my) ile güncellenir,
-  böylece React yeniden render olmadan akıcı çalışır.
 */
-"use client"
-
-import { useEffect, useRef } from "react"
-
 export function AnimatedBackground() {
-  const glowRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    let frame = 0
-    const handleMove = (e: MouseEvent) => {
-      // requestAnimationFrame ile throttle ederek performansı korur.
-      cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => {
-        const el = glowRef.current
-        if (!el) return
-        el.style.setProperty("--mx", `${e.clientX}px`)
-        el.style.setProperty("--my", `${e.clientY}px`)
-        el.style.opacity = "1"
-      })
-    }
-    const handleLeave = () => {
-      if (glowRef.current) glowRef.current.style.opacity = "0"
-    }
-    window.addEventListener("mousemove", handleMove)
-    document.addEventListener("mouseleave", handleLeave)
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener("mousemove", handleMove)
-      document.removeEventListener("mouseleave", handleLeave)
-    }
-  }, [])
-
   return (
     <div
       aria-hidden
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-background"
     >
-      {/* Fareyi takip eden küçük beyaz ışık */}
-      <div
-        ref={glowRef}
-        className="absolute inset-0 opacity-0 transition-opacity duration-300"
-        style={{
-          background:
-            "radial-gradient(120px 120px at var(--mx, 50%) var(--my, 50%), color-mix(in oklch, white 22%, transparent), transparent 70%)",
-        }}
-      />
       {/* Kayan fabrika zemini ızgarası — konveyör / hareket hissi verir */}
       <div
         className="bg-grid-pan absolute inset-0 opacity-[0.18]"
