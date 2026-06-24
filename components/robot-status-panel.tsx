@@ -1,22 +1,18 @@
 /*
   ROBOT DURUM PANELİ
   -------------------------------------------------------------------------
-  Şartname madde 10'da zorunlu tutulan 8 robot durumunu listeler ve aktif
-  olanı vurgular. Üstte büyük bir "anlık durum" göstergesi bulunur.
+  Şartname madde 10'da zorunlu tutulan 8 robot durumunu listeler ve robottan
+  GERÇEK gelen aktif durumu vurgular. Robot bağlı değilken sahte durum
+  gösterilmez; "veri bekleniyor" uyarısı çıkar.
 
   FAYDASI: Operatör robotun hangi aşamada olduğunu (bekleme, yüklü hareket,
-  PLC bekliyor, hata, acil stop...) tek bakışta anlar. Renk kodları sayesinde
-  hata/acil durumlar anında fark edilir.
+  PLC bekliyor, hata, acil stop...) tek bakışta anlar.
 */
 "use client"
 
 import { Activity } from "lucide-react"
 import { PanelCard } from "@/components/panel-card"
-import {
-  ROBOT_STATE_META,
-  type RobotState,
-  type RobotTelemetry,
-} from "@/lib/robot-simulation"
+import { ROBOT_STATE_META, type RobotState, type RobotTelemetry } from "@/lib/robot-connection"
 import { cn } from "@/lib/utils"
 
 const ORDER: RobotState[] = [
@@ -39,21 +35,39 @@ const toneClasses: Record<string, { dot: string; text: string; bg: string }> = {
   danger: { dot: "bg-destructive", text: "text-destructive", bg: "bg-destructive/15" },
 }
 
-export function RobotStatusPanel({ telemetry }: { telemetry: RobotTelemetry }) {
-  const active = telemetry.state
-  const activeMeta = ROBOT_STATE_META[active]
-  const activeTone = toneClasses[activeMeta.tone]
+interface Props {
+  telemetry: RobotTelemetry | null
+  connected: boolean
+}
+
+export function RobotStatusPanel({ telemetry, connected }: Props) {
+  const active = telemetry?.state ?? null
 
   return (
     <PanelCard title="Robot Durumu" icon={Activity}>
       {/* Büyük anlık durum göstergesi */}
-      <div className={cn("mb-4 rounded-md border border-border p-4", activeTone.bg)}>
-        <p className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">Anlık Durum</p>
-        <div className="flex items-center gap-2.5">
-          <span className={cn("size-3 animate-pulse-dot rounded-full", activeTone.dot)} />
-          <span className={cn("text-lg font-bold", activeTone.text)}>{activeMeta.label}</span>
+      {active ? (
+        (() => {
+          const meta = ROBOT_STATE_META[active]
+          const tone = toneClasses[meta.tone]
+          return (
+            <div className={cn("mb-4 rounded-md border border-border p-4", tone.bg)}>
+              <p className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">Anlık Durum</p>
+              <div className="flex items-center gap-2.5">
+                <span className={cn("size-3 animate-pulse-dot rounded-full", tone.dot)} />
+                <span className={cn("text-lg font-bold", tone.text)}>{meta.label}</span>
+              </div>
+            </div>
+          )
+        })()
+      ) : (
+        <div className="mb-4 rounded-md border border-dashed border-border p-4 text-center">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground">Anlık Durum</p>
+          <p className="mt-1 text-sm font-semibold text-muted-foreground">
+            {connected ? "Telemetri bekleniyor…" : "Robot bağlı değil"}
+          </p>
         </div>
-      </div>
+      )}
 
       {/* Tüm durumların listesi — aktif olan vurgulanır */}
       <ul className="grid grid-cols-1 gap-1.5">
