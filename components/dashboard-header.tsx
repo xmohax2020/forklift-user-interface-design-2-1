@@ -12,7 +12,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Cpu, ShieldAlert, Clock, Link2, Link2Off } from "lucide-react"
+import { ShieldAlert, Clock, Link2, Link2Off } from "lucide-react"
 import type { ConnStatus, RobotTelemetry } from "@/lib/robot-connection"
 import { cn } from "@/lib/utils"
 
@@ -47,14 +47,12 @@ export function DashboardHeader({ telemetry, status, onEmergencyStop }: Props) {
     <header className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/80 px-4 py-3 backdrop-blur-sm">
       {/* Sol: kimlik */}
       <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Cpu className="size-5" aria-hidden />
+        <div className="flex size-10 items-center justify-center rounded-md bg-primary text-sm font-bold tracking-tight text-primary-foreground">
+          DR
         </div>
         <div>
-          <h1 className="text-balance text-base font-semibold leading-tight">
-            Otonom Forklift — Operatör Kontrol Paneli
-          </h1>
-          <p className="text-xs text-muted-foreground">SRUY 2026 • Fabrika İçi Lojistik Robotu</p>
+          <h1 className="text-balance text-base font-semibold leading-tight">Damas_Robo</h1>
+          <p className="text-xs text-muted-foreground">Kontrol Paneli</p>
         </div>
       </div>
 
