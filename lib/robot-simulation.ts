@@ -138,11 +138,14 @@ export function useRobotSimulation() {
   const stepElapsed = useRef(0)
 
   const pushLog = (dir: LogDirection, text: string) => {
-    msgId.current += 1
-    setMessages((prev) => [
-      { id: msgId.current, time: nowTime(), dir, text },
-      ...prev,
-    ].slice(0, 60))
+    // ID'yi her zaman mevcut listedeki en büyük id'den türetiyoruz.
+    // Böylece React StrictMode effect'leri iki kez çalıştırsa bile
+    // benzersiz key garanti edilir (çift "key" uyarısı oluşmaz).
+    setMessages((prev) => {
+      const nextId = (prev[0]?.id ?? 0) + 1
+      msgId.current = nextId
+      return [{ id: nextId, time: nowTime(), dir, text }, ...prev].slice(0, 60)
+    })
   }
 
   // İlk bağlantı el sıkışması logu (sadece bir kez).
